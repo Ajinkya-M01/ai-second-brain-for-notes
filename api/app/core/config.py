@@ -1,5 +1,6 @@
 """Core configuration loaded from environment variables using Pydantic Settings."""
 
+import os
 from pathlib import Path
 from typing import Optional
 from pydantic import model_validator
@@ -11,6 +12,10 @@ _API_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Absolute path to the root .env (one level above api/)
 _ENV_FILE = _API_DIR.parent / ".env"
+
+# Vercel's filesystem is read-only except /tmp (ephemeral, per-instance).
+IS_VERCEL = bool(os.environ.get("VERCEL"))
+_DATA_DIR = Path("/tmp/second_brain") if IS_VERCEL else _API_DIR / "data"
 
 
 class Settings(BaseSettings):
@@ -30,9 +35,9 @@ class Settings(BaseSettings):
 
     # Storage paths — defaults are absolute so they resolve correctly regardless of CWD.
     # Override via .env or environment variables if needed.
-    DATABASE_URL: str = f"sqlite:///{_API_DIR / 'data' / 'second_brain.db'}"
-    CHROMA_PERSIST_DIR: str = str(_API_DIR / "data" / "chroma")
-    UPLOAD_DIR: str = str(_API_DIR / "data" / "uploads")
+    DATABASE_URL: str = f"sqlite:///{_DATA_DIR / 'second_brain.db'}"
+    CHROMA_PERSIST_DIR: str = str(_DATA_DIR / "chroma")
+    UPLOAD_DIR: str = str(_DATA_DIR / "uploads")
 
     # OpenRouter AI provider settings (placeholders for Milestone 6+)
     OPENROUTER_API_KEY: Optional[str] = None

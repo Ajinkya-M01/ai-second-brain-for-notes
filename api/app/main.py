@@ -10,7 +10,7 @@ _API_DIR = Path(__file__).resolve().parent.parent
 if str(_API_DIR) not in sys.path:
     sys.path.insert(0, str(_API_DIR))
 
-from app.core.config import settings
+from app.core.config import settings, IS_VERCEL
 from app.api.routes.health import router as health_router
 from app.api.routes.notes import router as notes_router
 from app.api.routes.sources import router as sources_router
@@ -56,3 +56,12 @@ app.include_router(health_router)
 app.include_router(notes_router, prefix=settings.API_V1_STR)
 app.include_router(sources_router, prefix=settings.API_V1_STR)
 app.include_router(documents_router, prefix=settings.API_V1_STR)
+
+
+# On Vercel there is no migration step and the SQLite file starts empty on each
+# cold start, so create the schema directly. Locally, Alembic remains the source of truth.
+if IS_VERCEL:
+    from app.db.models import Base
+    from app.db.session import engine
+
+    Base.metadata.create_all(bind=engine)
