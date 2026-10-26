@@ -1,11 +1,13 @@
-"""Pytest fixtures for API and database tests."""
-
+import uuid
+import chromadb
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.ai.embeddings import FakeEmbeddingProvider
+from app.ai import vector_store as vs
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import app
@@ -67,3 +69,25 @@ def client(db_session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def mock_embedding_and_chroma(monkeypatch):
+    """Ensure no test ever calls live OpenRouter and each test has an isolated Chroma collection."""
+    client = chromadb.EphemeralClient()
+    col_name = f"test_{uuid.uuid4().hex}"
+    collection = client.create_collection(
+        name=col_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+    monkeypatch.setattr(vs, "_collection", collection)
+    monkeypatch.setattr(
+        "app.ai.embeddings.OpenRouterEmbeddingProvider",
+        FakeEmbeddingProvider,
+    )
+    yield
+    monkeypatch.setattr(vs, "_collection", None)
+    try:
+        client.delete_collection(col_name)
+    except Exception:
+        pass

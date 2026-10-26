@@ -11,6 +11,7 @@ import pypdf
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import Chunk, Source
+from app.services.chunking import create_chunks_for_pdf_pages
 
 
 def normalize_extracted_text(text: str) -> str:
@@ -173,17 +174,9 @@ def save_pdf_document(
     )
     db.add(source)
 
-    # Persist page-aware chunks with preserved 1-based page numbers
-    for ordinal, p in enumerate(pages):
-        chunk = Chunk(
-            id=str(uuid.uuid4()),
-            source_id=source_id,
-            ordinal=ordinal,
-            page_number=p["page_number"],
-            text=p["text"],
-            token_estimate=len(p["text"]) // 4 if p["text"] else 0,
-        )
-        db.add(chunk)
+    # Persist page-aware chunks with preserved 1-based page numbers and deterministic IDs
+    chunks = create_chunks_for_pdf_pages(source_id, pages)
+    db.add_all(chunks)
 
     db.commit()
     db.refresh(source)

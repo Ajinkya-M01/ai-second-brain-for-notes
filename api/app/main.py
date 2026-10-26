@@ -15,6 +15,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.notes import router as notes_router
 from app.api.routes.sources import router as sources_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.search import router as search_router
 
 logger = logging.getLogger("app.main")
 
@@ -56,6 +57,20 @@ app.include_router(health_router)
 app.include_router(notes_router, prefix=settings.API_V1_STR)
 app.include_router(sources_router, prefix=settings.API_V1_STR)
 app.include_router(documents_router, prefix=settings.API_V1_STR)
+app.include_router(search_router, prefix=settings.API_V1_STR)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Warm up ChromaDB on startup so the first request is not slow.
+    If OPENROUTER_API_KEY is not set, vector search will return 503 but
+    the rest of the app (notes, PDF upload, CRUD) still works normally.
+    """
+    try:
+        from app.ai import vector_store
+        vector_store.get_collection()
+    except Exception as exc:
+        logger.warning("ChromaDB startup init failed (non-fatal): %s", exc)
 
 
 # On Vercel there is no migration step and the SQLite file starts empty on each

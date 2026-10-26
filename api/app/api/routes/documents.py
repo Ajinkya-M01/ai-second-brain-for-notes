@@ -1,12 +1,29 @@
 """API route endpoints for Document uploads (PDF ingestion)."""
 
+import logging
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.source import SourceResponse
 from app.services import pdf as pdf_service
 
+logger = logging.getLogger("app.api.routes.documents")
+
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def _try_index(db: Session, source_id: str, title: str) -> None:
+    """Index source vectors if OPENROUTER_API_KEY is configured. Silent on failure."""
+    if not settings.OPENROUTER_API_KEY:
+        return
+    try:
+        from app.ai.embeddings import OpenRouterEmbeddingProvider
+        from app.services.indexing import index_source
+        provider = OpenRouterEmbeddingProvider()
+        index_source(db, source_id, provider, title=title)
+    except Exception as exc:
+        logger.warning("Background indexing failed for %s (non-fatal): %s", source_id, exc)
 
 
 @router.post(
@@ -39,6 +56,8 @@ async def upload_document_endpoint(
         file_bytes=file_bytes,
         original_filename=file.filename,
     )
+
+    _try_index(db, source.id, source.title)
 
     return SourceResponse(
         id=source.id,

@@ -1,14 +1,31 @@
 """API route endpoints for Notes."""
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.note import NoteCreate, NoteResponse, NoteUpdate
 from app.schemas.source import SourceListResponse, SourceResponse
 from app.services import notes as note_service
 
+logger = logging.getLogger("app.api.routes.notes")
+
 router = APIRouter(prefix="/notes", tags=["notes"])
+
+
+def _try_index(db: Session, source_id: str, title: str) -> None:
+    """Index source vectors if OPENROUTER_API_KEY is configured. Silent on failure."""
+    if not settings.OPENROUTER_API_KEY:
+        return
+    try:
+        from app.ai.embeddings import OpenRouterEmbeddingProvider
+        from app.services.indexing import index_source
+        provider = OpenRouterEmbeddingProvider()
+        index_source(db, source_id, provider, title=title)
+    except Exception as exc:
+        logger.warning("Background indexing failed for %s (non-fatal): %s", source_id, exc)
 
 
 def to_note_response(source) -> NoteResponse:
@@ -41,6 +58,7 @@ def create_note_endpoint(
 ) -> NoteResponse:
     """Create a new note, calculate content hash and store tags."""
     note = note_service.create_note(db, data)
+    _try_index(db, note.id, note.title)
     return to_note_response(note)
 
 
@@ -120,6 +138,8 @@ def update_note_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Note not found",
         )
+    if data.content is not None:
+        _try_index(db, updated.id, updated.title)
     return to_note_response(updated)
 
 
@@ -130,6 +150,12 @@ def update_note_endpoint(
 )
 def delete_note_endpoint(note_id: str, db: Session = Depends(get_db)):
     """Delete note and all associated tag relationships."""
+    # Remove vectors from ChromaDB before deleting from SQLite
+    try:
+        from app.services.indexing import delete_source_vectors
+        delete_source_vectors(note_id)
+    except Exception as exc:
+        logger.warning("Could not delete vectors for %s: %s", note_id, exc)
     deleted = note_service.delete_source(db, note_id)
     if not deleted:
         raise HTTPException(

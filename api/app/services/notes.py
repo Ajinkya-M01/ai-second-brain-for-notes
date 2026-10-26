@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
-from app.db.models import Source, Tag
+from app.db.models import Chunk, Source, Tag
 from app.schemas.note import NoteCreate, NoteUpdate
+from app.services.chunking import create_chunks_for_note
 
 
 def get_or_create_tags(db: Session, tag_names: List[str]) -> List[Tag]:
@@ -54,6 +55,12 @@ def create_note(db: Session, data: NoteCreate) -> Source:
         tags=tags,
     )
     db.add(note)
+    db.flush()
+
+    # Create and persist chunks for the note with deterministic IDs
+    chunks = create_chunks_for_note(note.id, data.content)
+    db.add_all(chunks)
+
     db.commit()
     db.refresh(note)
     return note
@@ -133,6 +140,11 @@ def update_note(
         note.content_sha256 = hashlib.sha256(content_bytes).hexdigest()
         # Mark status as pending re-indexing for future milestones
         note.status = "pending"
+
+        # Replace existing chunks transactionally
+        db.query(Chunk).filter(Chunk.source_id == note.id).delete()
+        chunks = create_chunks_for_note(note.id, data.content)
+        db.add_all(chunks)
 
     if data.tags is not None:
         note.tags = get_or_create_tags(db, data.tags)

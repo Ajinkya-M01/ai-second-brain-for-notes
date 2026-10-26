@@ -1,5 +1,6 @@
 """API route endpoints for generic Sources (notes and documents)."""
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.db.models import Chunk
@@ -9,6 +10,8 @@ from app.schemas.source import SourceListResponse, SourceResponse
 from app.services import notes as note_service
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("app.api.routes.sources")
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -81,7 +84,12 @@ def get_source_endpoint(
     summary="Delete a source by ID",
 )
 def delete_source_endpoint(source_id: str, db: Session = Depends(get_db)):
-    """Delete source and cascade chunks and tags."""
+    """Delete source, cascade chunks and tags, and remove vectors from ChromaDB."""
+    try:
+        from app.services.indexing import delete_source_vectors
+        delete_source_vectors(source_id)
+    except Exception as exc:
+        logger.warning("Could not delete vectors for %s: %s", source_id, exc)
     deleted = note_service.delete_source(db, source_id)
     if not deleted:
         raise HTTPException(
