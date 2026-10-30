@@ -11,11 +11,13 @@ if str(_API_DIR) not in sys.path:
     sys.path.insert(0, str(_API_DIR))
 
 from app.core.config import settings, IS_VERCEL
+from app.core.security import sanitize_secret_text
 from app.api.routes.health import router as health_router
 from app.api.routes.notes import router as notes_router
 from app.api.routes.sources import router as sources_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.search import router as search_router
+from app.api.routes.chat import router as chat_router
 
 logger = logging.getLogger("app.main")
 
@@ -28,25 +30,34 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    """Log full trace of unhandled exceptions and return readable error message."""
-    logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
-    detail = str(exc) if settings.APP_ENV == "development" else "Internal Server Error"
+    """Log full trace of unhandled exceptions without leaking secrets, returning safe detail."""
+    safe_exc_str = sanitize_secret_text(str(exc))
+    logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, safe_exc_str)
+    detail = safe_exc_str if settings.APP_ENV == "development" else "Internal Server Error"
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": detail},
     )
 
 
-# Configure CORS for local development
+# Configure CORS for local development (strictly restricted to known frontend origins)
+allowed_origins = list(
+    dict.fromkeys(
+        origin.strip()
+        for origin in [
+            settings.FRONTEND_ORIGIN,
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+        if origin and origin.strip()
+    )
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_ORIGIN,
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -58,12 +69,13 @@ app.include_router(notes_router, prefix=settings.API_V1_STR)
 app.include_router(sources_router, prefix=settings.API_V1_STR)
 app.include_router(documents_router, prefix=settings.API_V1_STR)
 app.include_router(search_router, prefix=settings.API_V1_STR)
+app.include_router(chat_router, prefix=settings.API_V1_STR)
 
 
 @app.on_event("startup")
 async def startup_event():
     """Warm up ChromaDB on startup so the first request is not slow.
-    If OPENROUTER_API_KEY is not set, vector search will return 503 but
+    If OPENROUTER_API_KEY is not set, vector search and chat will return 503 but
     the rest of the app (notes, PDF upload, CRUD) still works normally.
     """
     try:

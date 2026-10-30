@@ -1,4 +1,7 @@
 import { Note, NoteCreateInput, NoteListResponse, NoteUpdateInput } from '../types/note'
+import { ChatRequest, ChatResponse, Citation } from '../types/chat'
+
+export type { Citation, ChatRequest, ChatResponse }
 
 export class ApiError extends Error {
   status: number
@@ -52,6 +55,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       data && typeof data === 'object' && 'detail' in data
         ? typeof data.detail === 'string'
           ? data.detail
+          : typeof data.detail === 'object' && data.detail && 'detail' in data.detail
+          ? data.detail.detail
           : JSON.stringify(data.detail)
         : typeof data === 'string' && data.trim()
         ? data.trim()
@@ -135,6 +140,13 @@ export const notesApi = {
   async deleteSource(id: string): Promise<void> {
     return request<void>(`/api/v1/sources/${id}`, {
       method: 'DELETE',
+    })
+  },
+
+  async chat(data: ChatRequest): Promise<ChatResponse> {
+    return request<ChatResponse>('/api/v1/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
     })
   },
 

@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.security import read_bounded_upload_stream
 from app.db.session import get_db
 from app.schemas.source import SourceResponse
 from app.services import pdf as pdf_service
@@ -43,13 +44,8 @@ async def upload_document_endpoint(
             detail="Filename is missing from upload.",
         )
 
-    try:
-        file_bytes = await file.read()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Failed to read uploaded file stream: {str(exc)}",
-        )
+    max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
+    file_bytes = await read_bounded_upload_stream(file, max_bytes)
 
     source = pdf_service.save_pdf_document(
         db=db,

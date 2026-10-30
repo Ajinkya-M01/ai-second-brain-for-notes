@@ -7,14 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class NoteCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="Title of the note")
-    content: str = Field(..., description="Markdown or text content")
-    tags: List[str] = Field(default_factory=list, description="List of tag names")
+    content: str = Field(..., min_length=1, max_length=500_000, description="Markdown or text content")
+    tags: List[str] = Field(default_factory=list, max_length=20, description="List of tag names")
 
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255, description="Updated title")
-    content: Optional[str] = Field(None, description="Updated content")
-    tags: Optional[List[str]] = Field(None, description="Updated list of tag names")
+    content: Optional[str] = Field(None, max_length=500_000, description="Updated content")
+    tags: Optional[List[str]] = Field(None, max_length=20, description="Updated list of tag names")
 
 
 class NoteResponse(BaseModel):

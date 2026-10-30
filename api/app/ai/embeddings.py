@@ -26,6 +26,8 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from app.core.security import sanitize_secret_text
+
 logger = logging.getLogger("app.ai.embeddings")
 
 # Expected embedding dimension for nemotron-3-embed-1b
@@ -104,8 +106,12 @@ class OpenRouterEmbeddingProvider(EmbeddingProvider):
                 input=texts,
             )
         except Exception as exc:
-            # Log provider errors (without leaking the key)
-            logger.error("Embedding provider error (%s): %s", type(exc).__name__, exc)
+            # Log provider errors (without leaking the key or authorization headers)
+            logger.error(
+                "Embedding provider error (%s): %s",
+                type(exc).__name__,
+                sanitize_secret_text(str(exc)),
+            )
             raise RuntimeError(
                 f"Embedding service unavailable ({type(exc).__name__}). "
                 "Check OPENROUTER_API_KEY and model availability."

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = str(_DATA_DIR / "chroma")
     UPLOAD_DIR: str = str(_DATA_DIR / "uploads")
 
-    # OpenRouter AI provider settings (placeholders for Milestone 6+)
+    # OpenRouter AI provider settings
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_CHAT_MODEL: str = "nvidia/nemotron-3.5-lightning:free"
@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 10
     MAX_PDF_PAGES: int = 100
     MAX_CHAT_REQUESTS_PER_MINUTE: int = 10
+    CHAT_SIMILARITY_THRESHOLD: float = 0.35
 
     @model_validator(mode="after")
     def resolve_relative_paths(self):
@@ -65,4 +66,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

@@ -7,7 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.ai.embeddings import FakeEmbeddingProvider
+from app.ai.generation import FakeGenerationProvider
 from app.ai import vector_store as vs
+from app.core.rate_limit import reset_rate_limits
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import app
@@ -85,6 +87,12 @@ def mock_embedding_and_chroma(monkeypatch):
         "app.ai.embeddings.OpenRouterEmbeddingProvider",
         FakeEmbeddingProvider,
     )
+    monkeypatch.setattr(
+        "app.ai.generation.OpenRouterGenerationProvider",
+        FakeGenerationProvider,
+    )
+    # Reset per-test so rate-limit state never bleeds between tests
+    reset_rate_limits()
     yield
     monkeypatch.setattr(vs, "_collection", None)
     try:

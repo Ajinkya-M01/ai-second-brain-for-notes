@@ -7,26 +7,26 @@ import {
   FileText,
   Tag as TagIcon,
   MessageSquare,
-  Sparkles,
   Server,
   Layers,
   Menu,
   X,
   RefreshCw,
-  Send,
-  BookOpen,
   Edit3,
   Trash2,
   AlertCircle,
   CheckCircle2,
-  Calendar
+  Calendar,
 } from 'lucide-react'
 import { Note, NoteCreateInput } from './types/note'
+import { Citation } from './types/chat'
 import { notesApi } from './lib/api'
 import { NoteModal } from './components/NoteModal'
 import { DeleteNoteModal } from './components/DeleteNoteModal'
 import { NoteViewModal } from './components/NoteViewModal'
 import { UploadPdfModal } from './components/UploadPdfModal'
+import { CitationModal } from './components/CitationModal'
+import { ChatPanel } from './components/ChatPanel'
 
 interface HealthState {
   status: 'checking' | 'connected' | 'disconnected'
@@ -61,6 +61,7 @@ export default function App() {
   const [editingNote, setEditingNote] = useState<Note | null>(null)
   const [viewingNote, setViewingNote] = useState<Note | null>(null)
   const [deletingNote, setDeletingNote] = useState<Note | null>(null)
+  const [activeCitation, setActiveCitation] = useState<Citation | null>(null)
 
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastNotification[]>([])
@@ -158,7 +159,6 @@ export default function App() {
     setNotes((prev) => [source, ...prev])
     setTotalNotes((prev) => prev + 1)
     addToast('success', `PDF "${source.title}" uploaded and indexed successfully.`)
-    // Re-fetch to sync any server-side state
     fetchNotes()
   }
 
@@ -170,6 +170,20 @@ export default function App() {
   const openEditModal = (note: Note) => {
     setEditingNote(note)
     setIsNoteModalOpen(true)
+  }
+
+  const handleViewSourceById = async (sourceId: string) => {
+    const found = notes.find((n) => n.id === sourceId)
+    if (found) {
+      setViewingNote(found)
+      return
+    }
+    try {
+      const fetched = await notesApi.getNote(sourceId)
+      setViewingNote(fetched)
+    } catch {
+      addToast('error', 'Unable to load source document.')
+    }
   }
 
   return (
@@ -217,7 +231,7 @@ export default function App() {
             </div>
             <div>
               <span className="font-semibold tracking-tight text-white text-sm">Second Brain</span>
-              <span className="block text-[11px] text-[#94A3B8] font-mono">v0.1.0 • Notes MVP</span>
+              <span className="block text-[11px] text-[#94A3B8] font-mono">v0.1.0 • Grounded Q&A</span>
             </div>
           </div>
           <button
@@ -238,11 +252,12 @@ export default function App() {
             <nav className="space-y-1">
               <button
                 onClick={() => {
+                  setMobileTab('library')
                   setSelectedTag(null)
                   setSearchQuery('')
                 }}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  !selectedTag
+                  mobileTab === 'library' && !selectedTag
                     ? 'bg-[#171C26] text-white border border-[#262E3D]'
                     : 'text-[#94A3B8] hover:bg-[#171C26]/60 hover:text-white'
                 }`}
@@ -261,12 +276,15 @@ export default function App() {
                 <span>New Note</span>
               </button>
               <button
-                disabled
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-[#64748B] cursor-not-allowed opacity-60"
-                title="Conversations available in Milestone 7"
+                onClick={() => setMobileTab('chat')}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  mobileTab === 'chat'
+                    ? 'bg-[#171C26] text-white border border-[#262E3D]'
+                    : 'text-[#94A3B8] hover:bg-[#171C26]/60 hover:text-white'
+                }`}
               >
-                <MessageSquare className="h-4 w-4" />
-                <span>Conversations</span>
+                <MessageSquare className="h-4 w-4 text-[#8B5CF6]" />
+                <span>Ask Second Brain</span>
               </button>
             </nav>
           </div>
@@ -295,7 +313,10 @@ export default function App() {
                   return (
                     <button
                       key={tag}
-                      onClick={() => setSelectedTag(isSelected ? null : tag)}
+                      onClick={() => {
+                        setMobileTab('library')
+                        setSelectedTag(isSelected ? null : tag)
+                      }}
                       className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
                         isSelected
                           ? 'bg-[#8B5CF6]/20 text-[#A78BFA] border border-[#8B5CF6]/40 font-medium'
@@ -669,81 +690,14 @@ export default function App() {
             )}
           </section>
 
-          {/* Right Panel: Grounded Chat & Citations (Placeholder for Milestone 7) */}
-          <section
-            className={`w-full md:w-[460px] lg:w-[500px] flex-col bg-[#0E1118] border-l border-[#1F2633] ${
+          {/* Right Panel: Connected Grounded Chat & Citations */}
+          <ChatPanel
+            onCitationClick={(citation) => setActiveCitation(citation)}
+            onViewSource={handleViewSourceById}
+            className={`w-full md:w-[460px] lg:w-[500px] ${
               mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
             }`}
-          >
-            {/* Chat Header */}
-            <div className="flex h-12 items-center justify-between border-b border-[#1F2633] px-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-[#8B5CF6]" />
-                <span className="text-xs font-semibold tracking-tight text-white">Grounded Q&A</span>
-              </div>
-              <span className="rounded-full bg-[#171C26] px-2 py-0.5 text-[10px] font-mono text-[#94A3B8] border border-[#1F2633]">
-                Zero-Hallucination RAG
-              </span>
-            </div>
-
-            {/* Message Feed Preview */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="rounded-lg border border-purple-500/20 bg-purple-950/20 p-3 text-xs text-purple-200">
-                <span className="font-semibold">Milestone 3 Active:</span> Notes CRUD is now wired to SQLite.
-                In Milestones 4–7, chunks and embeddings will be generated for Q&A retrieval.
-              </div>
-
-              {/* User Mock Message */}
-              <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-xs bg-[#8B5CF6] px-3.5 py-2.5 text-xs text-white shadow-xs">
-                  How are notes stored in this architecture?
-                </div>
-              </div>
-
-              {/* Assistant Mock Message */}
-              <div className="flex justify-start">
-                <div className="max-w-[92%] rounded-2xl rounded-tl-xs border border-[#1F2633] bg-[#11151D] p-3.5 text-xs text-[#E2E8F0] space-y-2.5 shadow-sm">
-                  <p className="leading-relaxed">
-                    Notes are saved to the canonical <code className="text-purple-300 font-mono">sources</code> table in SQLite, computing deterministic SHA-256 hashes and managing normalized tags through <code className="text-purple-300 font-mono">source_tags</code> [S1].
-                  </p>
-
-                  <div className="space-y-1.5 pt-1 border-t border-[#1F2633]">
-                    <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider">
-                      Retrieved Evidence
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button className="flex items-center gap-1 rounded-md bg-[#171C26] px-2 py-1 text-[11px] font-mono text-[#A78BFA] border border-[#2D3748]">
-                        <BookOpen className="h-3 w-3" />
-                        <span>[S1] SQLite Canonical Storage</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Chat Input Composer */}
-            <div className="border-t border-[#1F2633] bg-[#11151D] p-3">
-              <div className="relative">
-                <textarea
-                  rows={2}
-                  disabled
-                  placeholder="Ask questions over your library... (Available in Milestone 7)"
-                  className="w-full resize-none rounded-xl border border-[#1F2633] bg-[#171C26] p-2.5 pr-10 text-xs text-white placeholder-[#64748B] focus:outline-hidden disabled:opacity-60 cursor-not-allowed"
-                />
-                <button
-                  disabled
-                  className="absolute right-2.5 bottom-2.5 flex h-7 w-7 items-center justify-center rounded-lg bg-[#8B5CF6] text-white opacity-50 cursor-not-allowed"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[10px] text-[#64748B]">
-                <span>Grounded answers backed by source citations</span>
-                <span className="font-mono">Milestone 3 / 12</span>
-              </div>
-            </div>
-          </section>
+          />
         </main>
       </div>
 
@@ -777,6 +731,14 @@ export default function App() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onSuccess={handleUploadSuccess}
+      />
+
+      {/* Citation Detail Modal */}
+      <CitationModal
+        isOpen={Boolean(activeCitation)}
+        citation={activeCitation}
+        onClose={() => setActiveCitation(null)}
+        onViewSource={handleViewSourceById}
       />
     </div>
   )
